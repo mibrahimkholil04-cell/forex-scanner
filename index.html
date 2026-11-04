@@ -1,0 +1,179 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Forex Scanner</title>
+<style>
+*{box-sizing:border-box}
+body{
+ margin:0;background:#080e19;color:white;
+ font-family:Arial,sans-serif;padding:18px
+}
+h1{color:#35c8ff;text-align:center}
+.card{
+ background:#141f30;padding:18px;
+ border-radius:14px;margin:15px 0;
+ border:1px solid #293950
+}
+select,input,button{
+ width:100%;padding:13px;margin:8px 0;
+ border-radius:8px;border:1px solid #40516b;
+ background:#0b1423;color:white;font-size:16px
+}
+button{background:#087dcb;font-weight:bold}
+.buy{color:#18e68b;font-size:26px;font-weight:bold}
+.sell{color:#ff5555;font-size:26px;font-weight:bold}
+.wait{color:#ffc34d;font-size:26px;font-weight:bold}
+small{color:#aab9cc}
+</style>
+</head>
+<body>
+
+<h1>📊 FOREX SCANNER</h1>
+<p style="text-align:center">Smart Market Analysis System</p>
+
+<div class="card">
+<h3>⚙️ API Settings</h3>
+<input id="key" type="password"
+placeholder="Enter Twelve Data API Key">
+<button onclick="saveKey()">Save API Key</button>
+<small>Get your API key from twelvedata.com</small>
+</div>
+
+<div class="card">
+<h3>🌍 Select Currency Pair</h3>
+<select id="pair">
+<option>EUR/USD</option>
+<option>GBP/USD</option>
+<option>USD/JPY</option>
+<option>USD/CHF</option>
+<option>AUD/USD</option>
+<option>USD/CAD</option>
+<option>NZD/USD</option>
+</select>
+
+<select id="interval">
+<option value="15min">15 Minutes</option>
+<option value="1h">1 Hour</option>
+<option value="4h">4 Hours</option>
+</select>
+
+<button onclick="scan()">🔍 SCAN MARKET</button>
+</div>
+
+<div class="card">
+<h3>📈 Market Signal</h3>
+<div id="signal" class="wait">WAITING...</div>
+<p id="price">Price: --</p>
+<p id="trend">Trend: --</p>
+<p id="rsi">RSI: --</p>
+<p id="macd">MACD: --</p>
+<p id="ema">EMA: --</p>
+<p id="time">Updated: --</p>
+</div>
+
+<div class="card">
+<h3>⚠️ Risk Management</h3>
+<p>Always use Stop Loss.</p>
+<p>Risk only 1% of your capital per trade.</p>
+<p>Never trade based on one indicator alone.</p>
+</div>
+
+<script>
+function saveKey(){
+ const k=document.getElementById("key").value.trim();
+ if(!k){alert("Enter API Key");return}
+ localStorage.setItem("forex_api",k);
+ alert("API Key Saved");
+}
+
+function ema(data,period){
+ let k=2/(period+1);
+ let result=data[0];
+ for(let i=1;i<data.length;i++){
+  result=data[i]*k+result*(1-k);
+ }
+ return result;
+}
+
+function rsi(data){
+ let gain=0,loss=0;
+ for(let i=data.length-14;i<data.length;i++){
+  let d=data[i]-data[i-1];
+  if(d>0)gain+=d;
+  else loss-=d;
+ }
+ if(loss===0)return 100;
+ return 100-(100/(1+gain/loss));
+}
+
+async function scan(){
+ const key=localStorage.getItem("forex_api");
+ if(!key){alert("First save your API Key");return}
+
+ const pair=document.getElementById("pair").value;
+ const interval=document.getElementById("interval").value;
+ const signal=document.getElementById("signal");
+
+ signal.className="wait";
+ signal.innerText="SCANNING...";
+
+ try{
+  const url=new URL("https://api.twelvedata.com/time_series");
+  url.searchParams.set("symbol",pair);
+  url.searchParams.set("interval",interval);
+  url.searchParams.set("outputsize","100");
+  url.searchParams.set("apikey",key);
+
+  const response=await fetch(url);
+  const json=await response.json();
+
+  if(!json.values)throw new Error(json.message||"Data unavailable");
+
+  const candles=json.values.slice().reverse();
+  const prices=candles.map(x=>Number(x.close));
+
+  const last=prices[prices.length-1];
+  const fast=ema(prices,9);
+  const slow=ema(prices,21);
+  const rv=rsi(prices);
+
+  const macd=fast-slow;
+  let trend=fast>slow?"UPTREND":"DOWNTREND";
+  let result="WAIT";
+
+  if(fast>slow && rv>50 && rv<70)
+    result="BUY";
+  else if(fast<slow && rv<50 && rv>30)
+    result="SELL";
+
+  signal.innerText=result;
+  signal.className=result==="BUY"?"buy":
+    result==="SELL"?"sell":"wait";
+
+  document.getElementById("price").innerText=
+    "Price: "+last;
+  document.getElementById("trend").innerText=
+    "Trend: "+trend;
+  document.getElementById("rsi").innerText=
+    "RSI (14): "+rv.toFixed(2);
+  document.getElementById("macd").innerText=
+    "EMA Difference: "+macd.toFixed(6);
+  document.getElementById("ema").innerText=
+    "EMA 9: "+fast.toFixed(5)+" | EMA 21: "+slow.toFixed(5);
+  document.getElementById("time").innerText=
+    "Updated: "+new Date().toLocaleString();
+
+ }catch(e){
+  signal.innerText="ERROR";
+  signal.className="sell";
+  alert(e.message);
+ }
+}
+
+document.getElementById("key").value=
+ localStorage.getItem("forex_api")||"";
+</script>
+</body>
+</html>
